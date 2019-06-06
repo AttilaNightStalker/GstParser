@@ -28,11 +28,7 @@ int main() {
             continue;
         }
         delete bgr.data;
-        dprintf("got a frame\n");
-        // FILE* fd = fopen("sample.bgr", "wb");
-        // fwrite(bgr.data, sizeof(char), bgr.size, fd);
-        // printf("%d, %d\n", bgr.height, bgr.width);
-        // break;
+        printf("%d, %d\n", bgr.height, bgr.width);
     }
 
     // decoder.setPause();

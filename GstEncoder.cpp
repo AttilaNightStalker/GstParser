@@ -40,20 +40,3 @@ void GstEncoder::pushBuffer(FrameData buffer) {
     this->yuv_queue.push(buffer);
     this->yuv_mutex.unlock();
 }
-
-// void GstEncoder::pushBuffer(char *buffer) {
-//     GstBuffer *gstBuffer = gst_buffer_new();
-//     GstMemory *gstMemory = gst_allocator_alloc(NULL, this->bgrSize + 1,
-//     NULL);
-
-//     gst_buffer_insert_memory(gstBuffer, -1, gstMemory);
-//     GstMapInfo map;
-//     if (!gst_buffer_map(gstBuffer, &map, GST_MAP_READ)) {
-//         gst_memory_unref(gstMemory);
-//         g_error("map failed\n");
-//         exit(0);
-//     }
-
-//     memcpy(map.data, buffer, this->bgrSize);
-
-// }

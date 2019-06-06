@@ -1,5 +1,20 @@
 #include "FrameConverter.h"
 
+/*
+* if RGA device exists uncomment this
+*/
+// #define RGA
+
+/*
+* for official compilation, comment this
+*/
+
+#define DEBUG
+
+#ifndef DEBUG
+    #define printf
+#endif
+
 #define SETCPU1 0
 #define SETCPU2 1
 #define MAX_QUEUE 10
@@ -28,11 +43,8 @@ class GstDecoder {
 
     guint watch;
 
-    mutex yuv_mutex;
     mutex bgr_mutex;
     sem_t bgr_sem;
-    sem_t yuv_sem;
-
 
    public:
     int type;
@@ -45,7 +57,6 @@ class GstDecoder {
 
     GstStateChangeReturn setPause();
     FrameData getFrame();
-    FrameData getRaw();
 
     bool reset();
 };
@@ -64,10 +75,3 @@ class GstEncoder {
     void pushBuffer(FrameData buffer);
 };
 
-
-/*
-gst-launch-1.0 rtspsrc
-location=rtsp://admin:IVA_1114@192.168.10.65:554/h264/ch1/sub/av_stream !
-rtph264depay ! h264parse ! decodebin caps=\'video/x-raw,format-NV12\' !
-mpph264enc ! h264parse
-*/

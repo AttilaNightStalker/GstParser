@@ -22,7 +22,7 @@ void yv12_to_rgb24_neon(int width, int height, char *_src, char *_RGBOut) {
     int width3 = (width << 2) - width;
     int width9 = (width << 3) + width;
     unsigned char *RGBOut1 = RGBOut;
-   unsigned char *RGBOut2 = RGBOut1 + width3;
+    unsigned char *RGBOut2 = RGBOut1 + width3;
     // unsigned char *RGBOut1 = RGBOut + 3 * width * (height - 2);
     // unsigned char *RGBOut2 = RGBOut1 + width3;
 

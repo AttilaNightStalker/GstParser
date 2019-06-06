@@ -10,14 +10,14 @@
 
 
 void saveFrame(GstElement *sink, MutexQueue *queue_mtx) {
+
     static int lost = 0, total = 0, time;
     static struct timeval t1,t2;
-    
-    gettimeofday(&t2, NULL);
-    printf("time: %lf ms\n", (t2.tv_usec - t1.tv_usec)/1000.0);
 
-    printf("saved a frame\n");
-    queue_mtx->mtx->lock();
+    gettimeofday(&t2, NULL);
+    printf("seg time: %lf ms\n", (double)(t2.tv_sec - t1.tv_sec)*1000.0 + (t2.tv_usec - t1.tv_usec)/1000.0);
+
+    gettimeofday(&t1,NULL);
 
     dprintf("saving frame, size: %d\n", (int)queue_mtx->que->size());
     if (queue_mtx->que->size() >= 10) {
@@ -27,7 +27,9 @@ void saveFrame(GstElement *sink, MutexQueue *queue_mtx) {
         GstSample *sample = gst_app_sink_pull_sample(GST_APP_SINK(sink));
         gst_sample_unref(sample);
 
+        printf("************************************************************\n");
         printf("lost rate: %lf\n", (double)lost / total);
+        printf("************************************************************\n");
         queue_mtx->mtx->unlock();
 
         //free(queue_mtx);
@@ -39,11 +41,14 @@ void saveFrame(GstElement *sink, MutexQueue *queue_mtx) {
     int height, width;
 
     GstSample *sample = gst_app_sink_pull_sample(GST_APP_SINK(sink));
-    // if (sample == NULL) {printf("pull sample failed\n"); exit(0);}
+    if (sample == NULL) {printf("pull sample failed when saving a frame in the call back function: GstDecoder.cpp, line44\n"); exit(1);}
+
     GstBuffer *buffer = gst_sample_get_buffer(sample);
-    // if (buffer == NULL) {printf("pull buffer failed\n"); exit(0);}
+    if (buffer == NULL) {printf("pull buffer failed when saving a frame in the call back function: GstDecoder.cpp, line47\n"); exit(1);}
+
     GstMemory *memory = gst_buffer_get_all_memory(buffer);
-    // if (memory == NULL) {printf("pull memory failed\n"); exit(0);}
+    if (memory == NULL) {printf("pull memory failed when saving a frame in the call back function: GstDecoder.cpp, line50\n"); exit(1);}
+
 
     GstMapInfo map;
     if (!gst_memory_map(memory, &map, GST_MAP_READ)) {
@@ -59,11 +64,29 @@ void saveFrame(GstElement *sink, MutexQueue *queue_mtx) {
     gst_structure_get_int(structure, "height", &height);
     gst_structure_get_int(structure, "width", &width);
 
-    char *dumpbuffer = (char *)malloc(map.size);
-    memcpy(dumpbuffer, map.data, map.size);
+    int size = width*height;
+    int y_stride = width; 
+    int uv_stride = (width + 1) / 2 * 2;
+    int rgb_stride = width * 3;
 
-    queue_mtx->que->push(FrameData(dumpbuffer, height, width, (int)map.size));
+    unsigned char *dumpbuffer = (unsigned char *)malloc(size*3 + 1);
+
+#ifndef RGA
+    unsigned char *readbuffer = (unsigned char *)malloc(map.size);
+    memcpy(readbuffer, map.data, map.size);
+    libyuv::NV12ToRGB24(readbuffer, y_stride, readbuffer + size, uv_stride, dumpbuffer, rgb_stride, width, height);
+    delete readbuffer;
+#else
+    memcpy(dumpbuffer, map.data, map.size);
+#endif
+
+    printf("map.size: %ld\n", map.size);
+
+    queue_mtx->mtx->lock();
+    /*locked*/
+    queue_mtx->que->push(FrameData((char*)dumpbuffer, height, width, size*3 + 1));
     sem_post(queue_mtx->sem);
+    /*unlocked*/
     queue_mtx->mtx->unlock();
 
     // pthread_mutex_unlock(&queue_m);
@@ -73,9 +96,13 @@ void saveFrame(GstElement *sink, MutexQueue *queue_mtx) {
     gst_memory_unref(memory);
     // gst_buffer_unref(buffer);
     gst_sample_unref(sample);
+    
+    gettimeofday(&t2, NULL);
+    printf("time: %lf ms\n", (double)(t2.tv_sec - t1.tv_sec)*1000.0 + (t2.tv_usec - t1.tv_usec)/1000.0);
+    // free(queue_mtx);
 
     gettimeofday(&t1,NULL);
-    // free(queue_mtx);
+
     return;
 }
 
@@ -151,10 +178,10 @@ gboolean run_bus_callback(GstBus *bus, GstMessage *message, gpointer data) {
                     gst_element_state_get_name(oldState),
                     gst_element_state_get_name(newState));
         
-        case GST_MESSAGE_STREAM_STATUS:
-            GstStreamStatusType type;
-            gst_message_parse_stream_status(message, &type, NULL);
-            printf("stream status type: %d\n", type);
+        // case GST_MESSAGE_STREAM_STATUS:
+        //     GstStreamStatusType type;
+        //     gst_message_parse_stream_status(message, &type, NULL);
+        //     printf("stream status type: %d\n", type);
 
         default:
             break;
@@ -255,34 +282,37 @@ bool rtspTest(const char *src) {
     printf("state: %d\n", (int)state);
     return state == GST_STATE_PLAYING;
 }
-/************************************************************************************************************/
-/************************************************************************************************************/
+
+/********************************************************************************************************************/
+/* IP camera source
+/********************************************************************************************************************/
 
 #ifdef __x86_64__
-#define PIPELINE_DEC                                                   \
-    "gst-launch-1.0 rtspsrc location=%s ! rtph264depay ! h264parse ! " \
-    "decodebin ! videoconvert ! video/x-raw,format=NV12 ! appsink name=sink "
+    #define PIPELINE_DEC                                                   \
+        "gst-launch-1.0 rtspsrc location=%s ! rtph264depay ! h264parse ! " \
+        "decodebin ! videoconvert ! video/x-raw,format=NV12 ! appsink name=sink "
 #endif
+
 #ifdef __aarch64__
-#define PIPELINE_DEC                                                         \
-    "gst-launch-1.0 rtspsrc location=%s ! rtph264depay ! h264parse ! tee name=t ! queue ! decodebin caps='video/x-raw,format=NV12' ! rgaconvert ! video/x-raw,format=BGR ! videorate ! video/x-raw,framerate=20/1 ! appsink name=sink t. ! queue ! flvmux ! rtmpsink location=\"rtmp://127.0.0.1:1935/live/show live=1\"" 
-    // "gst-launch-1.0 rtspsrc location=%s ! rtph264depay ! h264parse ! tee name=t ! queue ! decodebin caps='video/x-raw,format=NV12' ! rgaconvert ! video/x-raw,format=BGRA ! appsink name=sink t. ! queue ! flvmux ! rtmpsink location=\"rtmp://127.0.0.1:1935/show/live live=1\""   
+    #ifndef RGA
+        #define PIPELINE_DEC                                                         \
+            "gst-launch-1.0 rtspsrc location=%s ! rtph264depay ! h264parse ! tee name=t ! queue ! decodebin caps='video/x-raw,format=NV21' ! appsink name=sink name=sink t. ! queue ! flvmux ! rtmpsink location=\"rtmp://127.0.0.1:1935/show/live live=1\""    
+    #else
+        #define PIPELINE_DEC                                                          
+            "gst-launch-1.0 rtspsrc location=%s ! rtph264depay ! h264parse ! tee name=t ! queue ! decodebin caps='video/x-raw,format=NV12' ! rgaconvert ! video/x-raw,format=BGRA ! appsink name=sink t. ! queue ! flvmux ! rtmpsink location=\"rtmp://127.0.0.1:1935/show/live live=1\""  
+    #endif
 #endif
+
 GstDecoder::GstDecoder(const char *src) {
     gst_init(NULL, NULL);
 
     this->type = RTSP_STREAM;
     this->srcdev.srcurl = (char*)malloc(100);
     sprintf(this->srcdev.srcurl, "%s", src);
-    this->yuv_queue = queue<FrameData>();
     this->bgr_queue = queue<FrameData>();
     sem_init(&this->bgr_sem, 0, 0);
-    sem_init(&this->yuv_sem, 0, 0);
 
     gchar *cmd = g_strdup_printf(PIPELINE_DEC, src);
-    // gchar *cmd = g_strdup_printf("gst-launch-1.0 filesrc location=simpson.mp4
-    // ! decodebin ! videoconvert ! video/x-raw,format=BGR ! appsink
-    // name=sink");
 
     GError *error = NULL;
     this->pipeline = gst_parse_launch(cmd, &error);
@@ -307,6 +337,11 @@ GstDecoder::GstDecoder(const char *src) {
 }
 
 
+
+/********************************************************************************************************************/
+/* USB camera source
+/********************************************************************************************************************/
+
 #ifdef __x86_64__
 #define PIPELINE_CMD                                                \
     "gst-launch-1.0 v4l2src device=/dev/%s ! tee name=t ! queue ! " \
@@ -318,9 +353,12 @@ GstDecoder::GstDecoder(const char *src) {
 //     "gst-launch-1.0 v4l2src name=src device=/dev/%s ! queue ! tee name=t ! queue ! videorate ! video/x-raw,framerate=15/1 ! appsink name=sink t. ! queue ! mpph264enc ! h264parse ! flvmux ! rtmpsink location=\"rtmp://127.0.0.1:1935/show/live live=1\" "
 // #endif
 
-
 #ifdef __aarch64__
+#ifndef RGA
+#define PIPELINE_CMD "gst-launch-1.0 v4l2src name=src device=/dev/%s ! queue ! tee name=t ! queue ! mpph264enc ! h264parse ! flvmux ! rtmpsink location=\"rtmp://127.0.0.1:1935/show/live live=1\" t. ! queue ! videoconvert ! video/x-raw,format=NV12,framerate=20/1 ! appsink name=sink"
+#else
 #define PIPELINE_CMD "gst-launch-1.0 v4l2src name=src device=/dev/%s ! queue ! tee name=t ! queue ! mpph264enc ! h264parse ! flvmux ! rtmpsink location=\"rtmp://127.0.0.1:1935/show/live live=1\" t. ! queue ! videoconvert ! video/x-raw,format=NV12,framerate=20/1 ! rgaconvert ! video/x-raw,format=BGR ! queue ! appsink name=sink"
+#endif
 #endif
 
 GstDecoder::GstDecoder(int videono) {
@@ -337,10 +375,8 @@ GstDecoder::GstDecoder(int videono) {
         exit(0);
     }
 
-    this->yuv_queue = queue<FrameData>();
     this->bgr_queue = queue<FrameData>();
     sem_init(&this->bgr_sem, 0, 0);
-    sem_init(&this->yuv_sem, 0, 0);
 
     gchar *cmd = g_strdup_printf(PIPELINE_CMD, vidaddr);
 
@@ -434,19 +470,6 @@ FrameData GstDecoder::getFrame() {
 
     this->bgr_queue.pop();
     this->bgr_mutex.unlock();
-
-    return frame;
-}
-
-FrameData GstDecoder::getRaw() {
-    sem_wait(&this->yuv_sem);
-    this->yuv_mutex.lock();
-
-    dprintf("get a raw frame\n");
-
-    FrameData frame = this->yuv_queue.front();
-    this->yuv_queue.pop();
-    this->yuv_mutex.unlock();
 
     return frame;
 }

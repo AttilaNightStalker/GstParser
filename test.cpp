@@ -1,8 +1,7 @@
-#include <glib.h>
+// #include <glib.h>
 // #include <gst/app/app.h>
 // #include <gst/app/gstappsink.h>
-#include <gst/gst.h>
-#include <pthread.h>
+// #include <gst/gst.h>
 #include <sched.h>
 #include <semaphore.h>
 #include <stdio.h>
@@ -14,69 +13,59 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <stdio.h>
+#include "libyuv.h"
+#include <sys/time.h>
 
 using namespace std;
 
-#define TEST_WAIT 1
-
-gboolean test_bus_callback(GstBus *bus, GstMessage *message, gpointer data) {
-    bool *isSuccess = (bool *)data;
-    printf("Got %s message\n", GST_MESSAGE_TYPE_NAME(message));
-
-    switch (GST_MESSAGE_TYPE(message)) {
-        case GST_MESSAGE_ERROR:
-            GError *err;
-            gchar *debug;
-
-            gst_message_parse_error(message, &err, &debug);
-            printf("Error: %s\n", err->message);
-            g_error_free(err);
-            g_free(debug);
-            break;
-
-        case GST_MESSAGE_STATE_CHANGED:
-            GstState oldState, newState;
-            gst_message_parse_state_changed(message, &oldState, &newState,
-                                            NULL);
-            printf("old state: %s, new state %s\n",
-                   gst_element_state_get_name(oldState),
-                   gst_element_state_get_name(newState));
-
-            if (newState == GST_STATE_PLAYING) {
-                *isSuccess = true;
-            }
-        default:
-            break;
-    }
-
-    return TRUE;
-}
-
-void run_loop(GMainLoop *loop) {
-    // printf("run\n");
-    g_main_loop_run(loop);
-    // g_main_loop_run (loop);
-}
-
 int main(int argc, char *argv[]) {
-    gst_init(NULL, NULL);
-    gchar *cmd =
-        g_strdup_printf("gst-launch-1.0 v4l2src device=/dev/video%d ! tee name=t ! queue ! videoconvert ! mpph264enc ! h264parse ! flvmux ! rtmpsink location=\"rtmp://127.0.0.1:1935/show/live live=1\" t. ! fakesink", atoi(argv[1]));
 
-        // g_strdup_printf("gst-launch-1.0 v4l2src device=/dev/video%d ! tee name=t ! queue ! videoconvert ! autovideosink t. ! queue ! fakesink", atoi(argv[1]));
+    static struct timeval t1,t2;
 
-    GError *error = NULL;
-    GstElement *pipeline = gst_parse_launch(cmd, &error);
+    gettimeofday(&t1, NULL);
+    for (int i = 0; i < 1000000; i++) {
+        char *testbuf = new char[10000];
+        testbuf[((int)testbuf) % 1000] = 'h';
+        // delete testbuf;
+    }
+    gettimeofday(&t2, NULL);
 
-    bool success = false;
-    GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline));
-    guint bus_watch = gst_bus_add_watch(bus, test_bus_callback, &success);
-    gst_object_unref(bus);
+    printf("time: %lf ms\n", ((double)(t2.tv_sec - t1.tv_sec)*1000.0 + (t2.tv_usec - t1.tv_usec)/1000.0) / 100000);
 
-    GMainLoop *loop = g_main_loop_new(NULL, FALSE);;
-    thread t = thread(run_loop, loop);
-    
-    gst_element_set_state(pipeline, GST_STATE_PLAYING);
-    t.join();
-    sleep(TEST_WAIT);
+    sleep(10);
+    // int width = 1920;
+    // int height = 1080;
+    // int size = width*height;
+
+    // int y_stride = width; 
+    // int uv_stride = (width + 1) / 2 * 2;
+    // int rgb_stride = width * 3;
+
+    // FILE *fp = fopen("sample.yuv", "rb");
+    // unsigned char *buffer = new unsigned char[size*4];
+    // unsigned char *result = new unsigned char[size*4];
+
+    // fread(buffer, size*4, 1, fp);
+
+    // struct timeval t1, t2;
+    // gettimeofday(&t1,NULL);
+
+    // for (int i = 0; i < 1000; i++) {
+    //     int res = libyuv::NV12ToRGB24(buffer, y_stride, buffer + size, uv_stride, result, rgb_stride, width, height);
+    // }
+
+    // gettimeofday(&t2, NULL);
+    // printf("%ld %ld\n", t2.tv_sec, t1.tv_sec);
+    // printf("time: %lf ms\n", ((double)(t2.tv_sec - t1.tv_sec)*1000 + ((t2.tv_usec - t1.tv_usec)/1000.0)) / 1000);
+
+    // FILE *wfp = fopen("sample.bgrx", "wb");
+    // fwrite(result, size*4, 1, wfp);
+
+    // delete buffer;
+    // delete result;
+    // fclose(fp);
+    // fclose(wfp);
+
+    return 0;
 }
