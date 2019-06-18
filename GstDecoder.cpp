@@ -296,23 +296,24 @@ bool rtspTest(const char *src) {
 #ifdef __aarch64__
     #ifndef RGA
         #define PIPELINE_DEC                                                         \
-            "gst-launch-1.0 rtspsrc location=%s ! rtph264depay ! h264parse ! tee name=t ! queue ! decodebin caps='video/x-raw,format=NV21' ! appsink name=sink name=sink t. ! queue ! flvmux ! rtmpsink location=\"rtmp://127.0.0.1:1935/show/live live=1\""    
+            "gst-launch-1.0 rtspsrc location=%s ! rtph264depay ! h264parse ! tee name=t ! queue ! decodebin caps='video/x-raw,format=NV21' ! appsink name=sink name=sink t. ! queue ! flvmux ! rtmpsink location=%s"    
     #else
-        #define PIPELINE_DEC                                                          
-            "gst-launch-1.0 rtspsrc location=%s ! rtph264depay ! h264parse ! tee name=t ! queue ! decodebin caps='video/x-raw,format=NV12' ! rgaconvert ! video/x-raw,format=BGRA ! appsink name=sink t. ! queue ! flvmux ! rtmpsink location=\"rtmp://127.0.0.1:1935/show/live live=1\""  
+        #define PIPELINE_DEC "gst-launch-1.0 rtspsrc location=%s ! rtph264depay ! h264parse ! tee name=t ! queue ! decodebin ! rgaconvert ! video/x-raw,format=BGRA ! appsink name=sink t. ! queue ! flvmux ! rtmpsink location=%s" 
     #endif
 #endif
 
-GstDecoder::GstDecoder(const char *src) {
+GstDecoder::GstDecoder(const char *src, const char *dst) {
     gst_init(NULL, NULL);
 
     this->type = RTSP_STREAM;
     this->srcdev.srcurl = (char*)malloc(100);
     sprintf(this->srcdev.srcurl, "%s", src);
+    this->dstaddr = (char*)malloc(100);
+    sprintf(this->dstaddr, "%s", dst);
     this->bgr_queue = queue<FrameData>();
     sem_init(&this->bgr_sem, 0, 0);
 
-    gchar *cmd = g_strdup_printf(PIPELINE_DEC, src);
+    gchar *cmd = g_strdup_printf(PIPELINE_DEC, src, dst);
 
     GError *error = NULL;
     this->pipeline = gst_parse_launch(cmd, &error);
@@ -355,16 +356,18 @@ GstDecoder::GstDecoder(const char *src) {
 
 #ifdef __aarch64__
 #ifndef RGA
-#define PIPELINE_CMD "gst-launch-1.0 v4l2src name=src device=/dev/%s ! queue ! tee name=t ! queue ! mpph264enc ! h264parse ! flvmux ! rtmpsink location=\"rtmp://127.0.0.1:1935/show/live live=1\" t. ! queue ! videoconvert ! video/x-raw,format=NV12,framerate=20/1 ! appsink name=sink"
+#define PIPELINE_CMD "gst-launch-1.0 v4l2src name=src device=/dev/%s ! queue ! tee name=t ! queue ! mpph264enc ! h264parse ! flvmux ! rtmpsink location=%s t. ! queue ! videoconvert ! video/x-raw,format=NV12,framerate=20/1 ! appsink name=sink"
 #else
-#define PIPELINE_CMD "gst-launch-1.0 v4l2src name=src device=/dev/%s ! queue ! tee name=t ! queue ! mpph264enc ! h264parse ! flvmux ! rtmpsink location=\"rtmp://127.0.0.1:1935/show/live live=1\" t. ! queue ! videoconvert ! video/x-raw,format=NV12,framerate=20/1 ! rgaconvert ! video/x-raw,format=BGR ! queue ! appsink name=sink"
+#define PIPELINE_CMD "gst-launch-1.0 v4l2src name=src device=/dev/%s ! queue ! tee name=t ! queue ! mpph264enc ! h264parse ! flvmux ! rtmpsink location=%s t. ! queue ! videoconvert ! video/x-raw,format=NV12,framerate=20/1 ! rgaconvert ! video/x-raw,format=BGR ! queue ! appsink name=sink"
 #endif
 #endif
 
-GstDecoder::GstDecoder(int videono) {
+GstDecoder::GstDecoder(int videono, const char* dst) {
     gst_init(NULL, NULL);
     this->type = USB_CAM;
     this->srcdev.videono = videono;
+    this->dstaddr = (char*)malloc(100);
+    sprintf(this->dstaddr, "%s", dst);
     this->loop = g_main_loop_new(NULL, FALSE);
     thread t = thread(run_loop, loop);
     t.detach();
@@ -378,7 +381,7 @@ GstDecoder::GstDecoder(int videono) {
     this->bgr_queue = queue<FrameData>();
     sem_init(&this->bgr_sem, 0, 0);
 
-    gchar *cmd = g_strdup_printf(PIPELINE_CMD, vidaddr);
+    gchar *cmd = g_strdup_printf(PIPELINE_CMD, vidaddr, dst);
 
     /* set src frame rate*/
     //GstElement *v4l2src = gst_bin_get_by_name(GST_BIN(this->pipeline), "src");
@@ -419,7 +422,7 @@ bool GstDecoder::reset() {
     }
 
     GError *error = NULL;
-    gchar *cmd = g_strdup_printf(PIPELINE_CMD, vidaddr);
+    gchar *cmd = g_strdup_printf(PIPELINE_CMD, vidaddr, this->dstaddr);
     this->pipeline = gst_parse_launch(cmd, &error);
 
     GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(this->pipeline));

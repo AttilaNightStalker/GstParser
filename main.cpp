@@ -7,12 +7,13 @@ using namespace std;
 #define RTSP_SRC "rtsp://admin:object2018@192.168.10.111:554/h264/ch1/main/av_stream"
 #define RTSP_FRT "rtsp://admin:ad123456@192.168.10.67:554/mpeg4"
 
+#define RTMP_DST "rtmp://127.0.0.1:1935/show/live live=1"
 
 int main() {
 #ifdef __aarch64__
     printf("aarch64\n");
 #endif
-    GstDecoder decoder(RTSP_SRC);
+    GstDecoder decoder(RTSP_SRC, RTMP_DST);
     cpu_set_t cpu;
     CPU_ZERO(&cpu);
     CPU_SET(1, &cpu);

@@ -3,12 +3,15 @@
 /*
 * if RGA device exists uncomment this
 */
-// #define RGA
+#define RGA
+
+#ifndef RGA
+#include "libyuv.h"
+#endif
 
 /*
 * for official compilation, comment this
 */
-
 #define DEBUG
 
 #ifndef DEBUG
@@ -36,9 +39,10 @@ class GstDecoder {
         char *srcurl;
     } srcdev;
 
+    char *dstaddr;
+
     GstElement *pipeline, *sink;
     GMainLoop *loop;
-    queue<FrameData> yuv_queue;
     queue<FrameData> bgr_queue;
 
     guint watch;
@@ -49,8 +53,8 @@ class GstDecoder {
    public:
     int type;
     
-    GstDecoder(const char* src);
-    GstDecoder(int videoNo);
+    GstDecoder(const char *src, const char *dst);
+    GstDecoder(int videono, const char* dst);
 
     GstStateChangeReturn setPlay(cpu_set_t &cpu);
     GstStateChangeReturn setPlay(cpu_set_t &cpu, bool convert);

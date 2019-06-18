@@ -16,8 +16,6 @@
 #include <vector>
 #include <sys/time.h>
 
-#include "libyuv.h"
-
 #define dprintf
 
 using namespace std;
