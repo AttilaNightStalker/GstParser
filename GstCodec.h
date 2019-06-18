@@ -1,9 +1,5 @@
 #include "FrameConverter.h"
 
-/*
-* if RGA device exists uncomment this
-*/
-#define RGA
 
 #ifndef RGA
 #include "libyuv.h"
