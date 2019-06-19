@@ -65,22 +65,22 @@ void saveFrame(GstElement *sink, MutexQueue *queue_mtx) {
     gst_structure_get_int(structure, "width", &width);
 
     int size = width*height;
+    int map_size = (int)map.size;
     int y_stride = width; 
     int uv_stride = (width + 1) / 2 * 2;
     int rgb_stride = width * 3;
 
-    unsigned char *dumpbuffer = (unsigned char *)malloc(size*3 + 1);
 
 #ifndef RGA
-    unsigned char *readbuffer = (unsigned char *)malloc(map.size);
-    memcpy(readbuffer, map.data, map.size);
-    libyuv::NV12ToRGB24(readbuffer, y_stride, readbuffer + size, uv_stride, dumpbuffer, rgb_stride, width, height);
+    unsigned char *dumpbuffer = (unsigned char *)malloc(size*3 + 1);
+    unsigned char *readbuffer = (unsigned char *)malloc(map_size + 1);
+    memcpy(readbuffer, map.data, map_size);
+    libyuv::NV12ToRGB24(readbuffer, y_stride, readbuffer + size + 8 * width, uv_stride, dumpbuffer, rgb_stride, width, height);
     delete readbuffer;
 #else
-    memcpy(dumpbuffer, map.data, map.size);
+    unsigned char *dumpbuffer = (unsigned char *)malloc(map_size);
+    memcpy(dumpbuffer, map.data, map_size);
 #endif
-
-    printf("map.size: %ld\n", map.size);
 
     queue_mtx->mtx->lock();
     /*locked*/
@@ -298,7 +298,7 @@ bool rtspTest(const char *src) {
         #define PIPELINE_DEC                                                         \
             "gst-launch-1.0 rtspsrc location=%s ! rtph264depay ! h264parse ! tee name=t ! queue ! decodebin caps='video/x-raw,format=NV21' ! appsink name=sink name=sink t. ! queue ! flvmux ! rtmpsink location=%s"    
     #else
-        #define PIPELINE_DEC "gst-launch-1.0 rtspsrc location=%s ! rtph264depay ! h264parse ! tee name=t ! queue ! decodebin ! rgaconvert ! video/x-raw,format=BGRA ! appsink name=sink t. ! queue ! flvmux ! rtmpsink location=%s" 
+        #define PIPELINE_DEC "gst-launch-1.0 rtspsrc location=%s ! rtph264depay ! h264parse ! tee name=t ! queue ! decodebin ! rgaconvert ! video/x-raw,format=BGR ! appsink name=sink t. ! queue ! flvmux ! rtmpsink location=%s" 
     #endif
 #endif
 
